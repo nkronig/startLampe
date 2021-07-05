@@ -4,12 +4,14 @@
 
 #define led 12
 #define testButton 2
-#define towButton 3
+#define towSwitch 3
 
 #define buffSize 256
 
 char receiveBuffer[buffSize];
 uint8_t receiveBufferSize = 0;
+bool towCommnadSent = false;
+long lastTime;
 
 RF24 radio(7, 8); // CE, CSN
 const byte addresses[][6] = {"TLAMP", "FLAMP"};
@@ -27,7 +29,6 @@ void setup()
 }
 void loop()
 {
-    delay(5);
     if (digitalRead(testButton))
     {
         bool test = false;
@@ -45,7 +46,8 @@ void loop()
         }
         else if (!test)
         {
-            while (digitalRead(testButton));
+            while (digitalRead(testButton))
+                ;
             int testTry = 0;
             while (!sendCommand(0))
             {
@@ -55,19 +57,25 @@ void loop()
             }
         }
     }
-    delay(5);
-
-    while (!radio.available())
-        ;
-    radio.read(&buttonState, sizeof(buttonState));
-    if (buttonState == HIGH)
+    if (digitalRead(towSwitch))
     {
-        digitalWrite(led, HIGH);
+        if (millis() >= lastTime + 1000)
+        {
+            sendCommand(1);
+        }
     }
     else
     {
-        digitalWrite(led, LOW);
+        if (!towCommnadSent)
+        {
+            long timeOut = millis();
+            while (!sendCommand(0) && millis() <= timeOut + 5000)
+                ;
+            towCommnadSent = true;
+        }
     }
+    delay(10);
+    checkState(false);
 }
 
 bool sendCommand(int state)
@@ -90,7 +98,7 @@ int checkState(bool waiting = true)
 {
     if (waiting)
     {
-        int timeOut = millis();
+        long timeOut = millis();
         while (radio.available() <= 0)
             if (millis() >= timeOut + 2000)
                 return 2;
@@ -104,10 +112,12 @@ int checkState(bool waiting = true)
             if (strcmp(receiveBuffer, "!On") == 0)
             {
                 Serial.println("Lamp status: On");
+                digitalWrite(led, HIGH);
                 return 1;
             }
             else if (strcmp(receiveBuffer, "!Of") == 0)
             {
+                digitalWrite(led, LOW);
                 Serial.println("Lamp status: Off");
                 return 0;
             }
