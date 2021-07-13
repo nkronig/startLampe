@@ -26,6 +26,9 @@ void setup()
     radio.openWritingPipe(addresses[0]);    // 00000 WritingPipe to Lamp
     radio.openReadingPipe(0, addresses[1]); // 00001 FeedbackPipe from Lamp
     radio.setPALevel(RF24_PA_MAX);
+    radio.setRetries(15,15);
+    radio.setPayloadSize(8);
+    radio.startListening();
 }
 void loop()
 {
@@ -83,7 +86,7 @@ bool sendCommand(int state)
     radio.stopListening();
     radio.write(&cmdBuf[state], sizeof(cmdBuf[state]));
     radio.startListening();
-    int feedback = checkState();
+    int feedback = checkState(true);
     if (feedback == state)
     {
         return true;
@@ -94,7 +97,7 @@ bool sendCommand(int state)
     }
 }
 
-int checkState(bool waiting = true)
+int checkState(bool waiting)
 {
     if (waiting)
     {
