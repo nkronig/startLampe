@@ -13,8 +13,8 @@ uint8_t receiveBufferSize = 0;
 bool towCommnadSent = false;
 long lastTime;
 
-RF24 radio(7, 8); // CE, CSN
-const byte addresses[][6] = {"TLAMP", "FLAMP"};
+RF24 radio(10, 9); // CE, CSN
+const byte address[6] = "00001";
 boolean buttonState = 0;
 
 const char cmdBuf[][4] = {"!Of", "!On"};
@@ -22,17 +22,20 @@ const char cmdBuf[][4] = {"!Of", "!On"};
 void setup()
 {
     pinMode(12, OUTPUT);
+    Serial.begin(115200);
     radio.begin();
-    radio.openWritingPipe(addresses[0]);    // 00000 WritingPipe to Lamp
-    radio.openReadingPipe(0, addresses[1]); // 00001 FeedbackPipe from Lamp
+    radio.openWritingPipe(address);
     radio.setPALevel(RF24_PA_MAX);
-    radio.setRetries(15,15);
-    radio.setPayloadSize(8);
-    radio.startListening();
+    radio.setDataRate(RF24_250KBPS);
+    radio.stopListening();
+    Serial.println("Setup of Switch finished!");
 }
 void loop()
 {
-    if (digitalRead(testButton))
+    sendCommand(0);
+    delay(1000);
+    sendCommand(1);
+    /*if (digitalRead(testButton))
     {
         bool test = false;
         while (test = !sendCommand(1) && digitalRead(testButton))
@@ -76,25 +79,17 @@ void loop()
                 ;
             towCommnadSent = true;
         }
-    }
-    delay(10);
-    checkState(false);
+    }*/
+    delay(1000);
+    //checkState(false);
 }
 
-bool sendCommand(int state)
+void sendCommand(int state)
 {
     radio.stopListening();
     radio.write(&cmdBuf[state], sizeof(cmdBuf[state]));
+    Serial.println(cmdBuf[state]);
     radio.startListening();
-    int feedback = checkState(true);
-    if (feedback == state)
-    {
-        return true;
-    }
-    else if (feedback == 2)
-    {
-        return false;
-    }
 }
 
 int checkState(bool waiting)
@@ -109,7 +104,8 @@ int checkState(bool waiting)
     if (radio.available() > 0)
     {
         radio.read(receiveBuffer, buffSize);
-        Serial.println(receiveBuffer);
+        Serial.println("received: ");
+        Serial.print(receiveBuffer);
         if (receiveBuffer[0] == '!')
         {
             if (strcmp(receiveBuffer, "!On") == 0)
