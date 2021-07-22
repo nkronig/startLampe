@@ -2,7 +2,7 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 
-#define led 12
+#define led 4
 #define testButton 2
 #define towSwitch 3
 
@@ -10,9 +10,9 @@
 
 char receiveBuffer[buffSize];
 uint8_t receiveBufferSize = 0;
-bool towCommnadSent = false;
+bool offCommnadSent = false;
 long lastTime;
-
+boolean lampState = false;
 RF24 radio(10, 9); // CE, CSN
 const byte address[6] = "00001";
 boolean buttonState = 0;
@@ -21,7 +21,7 @@ const char cmdBuf[][4] = {"!Of", "!On"};
 
 void setup()
 {
-    pinMode(12, OUTPUT);
+    //pinMode(12, OUTPUT);
     Serial.begin(115200);
     radio.begin();
     radio.openWritingPipe(address);
@@ -29,61 +29,48 @@ void setup()
     radio.setDataRate(RF24_250KBPS);
     radio.stopListening();
     Serial.println("Setup of Switch finished!");
+    sendCommand(0);
+    sendCommand(0);
 }
 void loop()
 {
-    sendCommand(0);
-    delay(1000);
-    sendCommand(1);
-    /*if (digitalRead(testButton))
-    {
-        bool test = false;
-        while (test = !sendCommand(1) && digitalRead(testButton))
-            ;
-        if (test)
-        {
-            int testTry = 0;
-            while (!sendCommand(0))
-            {
-                testTry++;
-                if (testTry >= 3)
-                    break;
-            }
-        }
-        else if (!test)
-        {
-            while (digitalRead(testButton))
-                ;
-            int testTry = 0;
-            while (!sendCommand(0))
-            {
-                testTry++;
-                if (testTry >= 3)
-                    break;
-            }
-        }
-    }
     if (digitalRead(towSwitch))
     {
+        offCommnadSent = false;
         if (millis() >= lastTime + 1000)
         {
-            sendCommand(1);
+            setState(true);
+            lastTime = millis();
         }
     }
     else
     {
-        if (!towCommnadSent)
+        if (!lampState && !offCommnadSent)
         {
-            long timeOut = millis();
-            while (!sendCommand(0) && millis() <= timeOut + 5000)
-                ;
-            towCommnadSent = true;
+            setState(false);
+            offCommnadSent = true;
         }
-    }*/
-    delay(1000);
-    //checkState(false);
+    }
+    if(lampState){
+        digitalWrite(led,HIGH);
+    }
+    else{
+        digitalWrite(led,LOW);
+    }
+    checkState(false);
+    delay(50);
 }
-
+void setState(boolean state){
+    if(!state){
+        sendCommand(0);
+        sendCommand(0);
+        digitalWrite(led,LOW);
+    }
+    if(state){
+        sendCommand(1);
+        digitalWrite(led,HIGH);
+    }
+}
 void sendCommand(int state)
 {
     radio.stopListening();
@@ -111,6 +98,7 @@ int checkState(bool waiting)
             if (strcmp(receiveBuffer, "!On") == 0)
             {
                 Serial.println("Lamp status: On");
+                lampState = true;
                 digitalWrite(led, HIGH);
                 return 1;
             }
@@ -118,6 +106,7 @@ int checkState(bool waiting)
             {
                 digitalWrite(led, LOW);
                 Serial.println("Lamp status: Off");
+                lampState = false;
                 return 0;
             }
         }
