@@ -26,6 +26,7 @@ void setup()
     radio.setPALevel(RF24_PA_MAX);
     radio.setDataRate(RF24_250KBPS);
     radio.startListening();
+    Serial.println("lamp started");
 }
 void loop()
 {
@@ -51,5 +52,5 @@ void loop()
             }
         }
     }
-    delay(10);
+    delay(50);
 }
