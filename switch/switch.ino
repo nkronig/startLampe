@@ -2,9 +2,10 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 
-#define led 4
-#define testButton 2
-#define towSwitch 3
+#define localLamp 4
+#define lampButton 3
+#define lampButtonLed 6
+#define buzzer 5
 
 #define buffSize 256
 
@@ -16,12 +17,20 @@ boolean lampState = false;
 RF24 radio(10, 9); // CE, CSN
 const byte address[6] = "00001";
 boolean buttonState = 0;
-
+boolean lampSwitch = false;
+long onTime = 0;
+boolean warningBuzzer = false;
+long lastBuzzerTime = 0;
+boolean buzzerState = false;
+int buzzerDelayTime[] = {500, 1600};
 const char cmdBuf[][4] = {"!Of", "!On"};
 
 void setup()
 {
-    //pinMode(12, OUTPUT);
+    pinMode(localLamp, OUTPUT);
+    pinMode(lampButtonLed, OUTPUT);
+    pinMode(buzzer, OUTPUT);
+    pinMode(lampButton, INPUT);
     Serial.begin(115200);
     radio.begin();
     radio.openWritingPipe(address);
@@ -29,18 +38,71 @@ void setup()
     radio.setDataRate(RF24_250KBPS);
     radio.stopListening();
     Serial.println("Setup of Switch finished!");
+    tone(buzzer, 2000); // Send 1KHz sound signal...
+    delay(100);
+    noTone(buzzer); // Stop sound...
     sendCommand(0);
     sendCommand(0);
 }
 void loop()
 {
-    if (digitalRead(towSwitch))
+    if (warningBuzzer)
+    {
+        if (millis() >= lastBuzzerTime + buzzerDelayTime[buzzerState])
+        {
+            lastBuzzerTime = millis();
+            if (buzzerState)
+            {
+                tone(buzzer, 1950); // Send 1KHz sound signal...
+            }
+            else{
+                noTone(buzzer);
+            }
+            buzzerState = !buzzerState;
+        }
+    }
+    else{
+        noTone(buzzer);
+    }
+    if (digitalRead(lampButton))
+    {
+        while (digitalRead(lampButton))
+            ;
+        if (lampSwitch)
+        {
+            tone(buzzer, 2800); // Send 1KHz sound signal...
+            delay(100);
+            noTone(buzzer); // Stop sound...
+            delay(100);
+            tone(buzzer, 2000); // Send 1KHz sound signal...
+            delay(100);
+            noTone(buzzer);
+            warningBuzzer = false;
+        }
+        else
+        {
+            tone(buzzer, 1000); // Send 1KHz sound signal...
+            delay(100);
+            noTone(buzzer); // Stop sound...
+            delay(100);
+            tone(buzzer, 2800); // Send 1KHz sound signal...
+            delay(100);
+            noTone(buzzer);
+            onTime = millis();
+        }
+        lampSwitch = !lampSwitch;
+    }
+    if (lampSwitch)
     {
         offCommnadSent = false;
         if (millis() >= lastTime + 1000)
         {
             setState(true);
             lastTime = millis();
+        }
+        if (millis() >= onTime + 40000)
+        {
+            warningBuzzer = true;
         }
     }
     else
@@ -51,24 +113,27 @@ void loop()
             offCommnadSent = true;
         }
     }
-    if(lampState){
+    /*if(lampState){
         digitalWrite(led,HIGH);
     }
     else{
         digitalWrite(led,LOW);
-    }
+    }*/
     checkState(false);
     delay(50);
 }
-void setState(boolean state){
-    if(!state){
+void setState(boolean state)
+{
+    if (!state)
+    {
         sendCommand(0);
         sendCommand(0);
-        digitalWrite(led,LOW);
+        digitalWrite(localLamp, LOW);
     }
-    if(state){
+    if (state)
+    {
         sendCommand(1);
-        digitalWrite(led,HIGH);
+        digitalWrite(localLamp, HIGH);
     }
 }
 void sendCommand(int state)
@@ -78,7 +143,6 @@ void sendCommand(int state)
     Serial.println(cmdBuf[state]);
     radio.startListening();
 }
-
 int checkState(bool waiting)
 {
     if (waiting)
@@ -99,12 +163,12 @@ int checkState(bool waiting)
             {
                 Serial.println("Lamp status: On");
                 lampState = true;
-                digitalWrite(led, HIGH);
+                digitalWrite(localLamp, HIGH);
                 return 1;
             }
             else if (strcmp(receiveBuffer, "!Of") == 0)
             {
-                digitalWrite(led, LOW);
+                digitalWrite(localLamp, LOW);
                 Serial.println("Lamp status: Off");
                 lampState = false;
                 return 0;
