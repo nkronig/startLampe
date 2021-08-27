@@ -9,6 +9,9 @@
 
 #define buffSize 256
 
+#define LED_MAX 255
+#define LED_MIN 0
+
 char receiveBuffer[buffSize];
 uint8_t receiveBufferSize = 0;
 bool offCommnadSent = false;
@@ -24,6 +27,9 @@ long lastBuzzerTime = 0;
 boolean buzzerState = false;
 int buzzerDelayTime[] = {500, 1600};
 const char cmdBuf[][4] = {"!Of", "!On"};
+int ledFadeValue = 0;
+bool ledFadeDir = true;
+long timeOld = 0;
 
 void setup()
 {
@@ -55,13 +61,15 @@ void loop()
             {
                 tone(buzzer, 1950); // Send 1KHz sound signal...
             }
-            else{
+            else
+            {
                 noTone(buzzer);
             }
             buzzerState = !buzzerState;
         }
     }
-    else{
+    else
+    {
         noTone(buzzer);
     }
     if (digitalRead(lampButton))
@@ -78,16 +86,22 @@ void loop()
             delay(100);
             noTone(buzzer);
             warningBuzzer = false;
+            ledFadeDir = true;
         }
         else
         {
             tone(buzzer, 1000); // Send 1KHz sound signal...
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
             delay(100);
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
             noTone(buzzer); // Stop sound...
             delay(100);
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
             tone(buzzer, 2800); // Send 1KHz sound signal...
             delay(100);
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
             noTone(buzzer);
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
             onTime = millis();
         }
         lampSwitch = !lampSwitch;
@@ -114,13 +128,44 @@ void loop()
         }
     }
     /*if(lampState){
-        digitalWrite(led,HIGH);
+        digitalWrite(lampButtonLed,HIGH);
     }
     else{
-        digitalWrite(led,LOW);
+        digitalWrite(lampButtonLed,LOW);
     }*/
     checkState(false);
-    delay(50);
+    if (!lampSwitch)
+    {
+        if (ledFadeValue < LED_MAX && ledFadeDir)
+        {
+            ledFadeValue++;
+        }
+        else if (ledFadeValue > LED_MIN && !ledFadeDir)
+        {
+            ledFadeValue--;
+        }
+        else
+        {
+            ledFadeDir = !ledFadeDir;
+        }
+        analogWrite(lampButtonLed, ledFadeValue);
+    }
+    else
+    {
+
+        //if (ledFadeValue < LED_MAX)
+        //{
+        //    ledFadeValue++;
+        //}
+        //analogWrite(lampButtonLed, ledFadeValue);
+        if(timeOld+200 < millis())
+        {
+            timeOld = millis();
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
+        }
+        
+    }
+    delay(5);
 }
 void setState(boolean state)
 {
