@@ -2,101 +2,192 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 
-#define led 12
-#define testButton 2
-#define towSwitch 3
+#define localLamp 4
+#define lampButton 3
+#define lampButtonLed 6
+#define buzzer 5
 
 #define buffSize 256
 
+#define LED_MAX 255
+#define LED_MIN 0
+
 char receiveBuffer[buffSize];
 uint8_t receiveBufferSize = 0;
-bool towCommnadSent = false;
+bool offCommnadSent = false;
 long lastTime;
-
-RF24 radio(7, 8); // CE, CSN
-const byte addresses[][6] = {"TLAMP", "FLAMP"};
+boolean lampState = false;
+RF24 radio(10, 9); // CE, CSN
+const byte address[6] = "00001";
 boolean buttonState = 0;
-
+boolean lampSwitch = false;
+long onTime = 0;
+boolean warningBuzzer = false;
+long lastBuzzerTime = 0;
+boolean buzzerState = false;
+int buzzerDelayTime[] = {500, 1600};
 const char cmdBuf[][4] = {"!Of", "!On"};
+int ledFadeValue = 0;
+bool ledFadeDir = true;
+long timeOld = 0;
 
 void setup()
 {
-    pinMode(12, OUTPUT);
+    pinMode(localLamp, OUTPUT);
+    pinMode(lampButtonLed, OUTPUT);
+    pinMode(buzzer, OUTPUT);
+    pinMode(lampButton, INPUT);
+    Serial.begin(115200);
     radio.begin();
-    radio.openWritingPipe(addresses[0]);    // 00000 WritingPipe to Lamp
-    radio.openReadingPipe(0, addresses[1]); // 00001 FeedbackPipe from Lamp
+    radio.openWritingPipe(address);
     radio.setPALevel(RF24_PA_MAX);
-    radio.setRetries(15,15);
-    radio.setPayloadSize(8);
-    radio.startListening();
+    radio.setDataRate(RF24_250KBPS);
+    radio.stopListening();
+    Serial.println("Setup of Switch finished!");
+    tone(buzzer, 2000); // Send 1KHz sound signal...
+    delay(100);
+    noTone(buzzer); // Stop sound...
+    sendCommand(0);
+    sendCommand(0);
 }
 void loop()
 {
-    if (digitalRead(testButton))
+    if (warningBuzzer)
     {
-        bool test = false;
-        while (test = !sendCommand(1) && digitalRead(testButton))
-            ;
-        if (test)
+        if (millis() >= lastBuzzerTime + buzzerDelayTime[buzzerState])
         {
-            int testTry = 0;
-            while (!sendCommand(0))
+            lastBuzzerTime = millis();
+            if (buzzerState)
             {
-                testTry++;
-                if (testTry >= 3)
-                    break;
+                tone(buzzer, 1950); // Send 1KHz sound signal...
             }
-        }
-        else if (!test)
-        {
-            while (digitalRead(testButton))
-                ;
-            int testTry = 0;
-            while (!sendCommand(0))
+            else
             {
-                testTry++;
-                if (testTry >= 3)
-                    break;
+                noTone(buzzer);
             }
-        }
-    }
-    if (digitalRead(towSwitch))
-    {
-        if (millis() >= lastTime + 1000)
-        {
-            sendCommand(1);
+            buzzerState = !buzzerState;
         }
     }
     else
     {
-        if (!towCommnadSent)
+        noTone(buzzer);
+    }
+    if (digitalRead(lampButton))
+    {
+        while (digitalRead(lampButton))
+            ;
+        if (lampSwitch)
         {
-            long timeOut = millis();
-            while (!sendCommand(0) && millis() <= timeOut + 5000)
-                ;
-            towCommnadSent = true;
+            tone(buzzer, 2800); // Send 1KHz sound signal...
+            delay(100);
+            noTone(buzzer); // Stop sound...
+            delay(100);
+            tone(buzzer, 2000); // Send 1KHz sound signal...
+            delay(100);
+            noTone(buzzer);
+            warningBuzzer = false;
+            ledFadeDir = true;
+        }
+        else
+        {
+            tone(buzzer, 1000); // Send 1KHz sound signal...
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
+            delay(100);
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
+            noTone(buzzer); // Stop sound...
+            delay(100);
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
+            tone(buzzer, 2800); // Send 1KHz sound signal...
+            delay(100);
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
+            noTone(buzzer);
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
+            onTime = millis();
+        }
+        lampSwitch = !lampSwitch;
+    }
+    if (lampSwitch)
+    {
+        offCommnadSent = false;
+        if (millis() >= lastTime + 1000)
+        {
+            setState(true);
+            lastTime = millis();
+        }
+        if (millis() >= onTime + 40000)
+        {
+            warningBuzzer = true;
         }
     }
-    delay(10);
+    else
+    {
+        if (!lampState && !offCommnadSent)
+        {
+            setState(false);
+            offCommnadSent = true;
+        }
+    }
+    /*if(lampState){
+        digitalWrite(lampButtonLed,HIGH);
+    }
+    else{
+        digitalWrite(lampButtonLed,LOW);
+    }*/
     checkState(false);
-}
+    if (!lampSwitch)
+    {
+        if (ledFadeValue < LED_MAX && ledFadeDir)
+        {
+            ledFadeValue++;
+        }
+        else if (ledFadeValue > LED_MIN && !ledFadeDir)
+        {
+            ledFadeValue--;
+        }
+        else
+        {
+            ledFadeDir = !ledFadeDir;
+        }
+        analogWrite(lampButtonLed, ledFadeValue);
+    }
+    else
+    {
 
-bool sendCommand(int state)
+        //if (ledFadeValue < LED_MAX)
+        //{
+        //    ledFadeValue++;
+        //}
+        //analogWrite(lampButtonLed, ledFadeValue);
+        if(timeOld+200 < millis())
+        {
+            timeOld = millis();
+            digitalWrite(lampButtonLed, !digitalRead(lampButtonLed));
+        }
+        
+    }
+    delay(5);
+}
+void setState(boolean state)
+{
+    if (!state)
+    {
+        sendCommand(0);
+        sendCommand(0);
+        digitalWrite(localLamp, LOW);
+    }
+    if (state)
+    {
+        sendCommand(1);
+        digitalWrite(localLamp, HIGH);
+    }
+}
+void sendCommand(int state)
 {
     radio.stopListening();
     radio.write(&cmdBuf[state], sizeof(cmdBuf[state]));
+    Serial.println(cmdBuf[state]);
     radio.startListening();
-    int feedback = checkState(true);
-    if (feedback == state)
-    {
-        return true;
-    }
-    else if (feedback == 2)
-    {
-        return false;
-    }
 }
-
 int checkState(bool waiting)
 {
     if (waiting)
@@ -109,19 +200,22 @@ int checkState(bool waiting)
     if (radio.available() > 0)
     {
         radio.read(receiveBuffer, buffSize);
-        Serial.println(receiveBuffer);
+        Serial.println("received: ");
+        Serial.print(receiveBuffer);
         if (receiveBuffer[0] == '!')
         {
             if (strcmp(receiveBuffer, "!On") == 0)
             {
                 Serial.println("Lamp status: On");
-                digitalWrite(led, HIGH);
+                lampState = true;
+                digitalWrite(localLamp, HIGH);
                 return 1;
             }
             else if (strcmp(receiveBuffer, "!Of") == 0)
             {
-                digitalWrite(led, LOW);
+                digitalWrite(localLamp, LOW);
                 Serial.println("Lamp status: Off");
+                lampState = false;
                 return 0;
             }
         }
